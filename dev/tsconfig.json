@@ -1,0 +1,35 @@
+{
+  "extends": "../tsconfig.json",
+  "exclude": [],
+  "include": [
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.mjs",
+    "**/*.cjs",
+    "**/*.ts",
+    "**/*.tsx",
+    "../src/**/*.ts",
+    "../src/**/*.tsx",
+    "next.config.mjs",
+    ".next/types/**/*.ts"
+  ],
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "@payload-config": [
+        "./payload.config.ts"
+      ],
+      "payload-auth-sso": [
+        "../src/index.ts"
+      ],
+      "payload-auth-sso/client": [
+        "../src/exports/client.ts"
+      ],
+      "payload-auth-sso/rsc": [
+        "../src/exports/rsc.ts"
+      ]
+    },
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+  }
+}

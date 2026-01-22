@@ -59,8 +59,10 @@ const buildConfigWithMemoryDB = async () => {
     },
     plugins: [
       payloadAuthSso({
-        collections: {
-          posts: true,
+        entra: {
+          clientId: process.env.ENTRA_CLIENT_ID || '',
+          clientSecret: process.env.ENTRA_CLIENT_SECRET || '',
+          tenantId: process.env.ENTRA_TENANT_ID || '',
         },
       }),
     ],

@@ -1,9 +1,5 @@
-import { BeforeDashboardClient as BeforeDashboardClient_fc6e7dd366b9e2c8ce77d31252122343 } from 'payload-auth-sso/client'
-import { BeforeDashboardServer as BeforeDashboardServer_c4406fcca100b2553312c5a3d7520a3f } from 'payload-auth-sso/rsc'
+import { AfterLogin as AfterLogin_eb089b9bd9ffcc9272a72c15fe969c0a } from 'payload-auth-sso/client'
 
 export const importMap = {
-  'payload-auth-sso/client#BeforeDashboardClient':
-    BeforeDashboardClient_fc6e7dd366b9e2c8ce77d31252122343,
-  'payload-auth-sso/rsc#BeforeDashboardServer':
-    BeforeDashboardServer_c4406fcca100b2553312c5a3d7520a3f,
+  "payload-auth-sso/client#AfterLogin": AfterLogin_eb089b9bd9ffcc9272a72c15fe969c0a
 }

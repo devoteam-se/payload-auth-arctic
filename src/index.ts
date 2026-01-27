@@ -9,6 +9,7 @@ import {
   generateState,
 } from './lib/pkce.js'
 
+// Legacy exports (for backward compatibility)
 export type {
   EntraConfig,
   OIDCClaims,
@@ -16,6 +17,19 @@ export type {
   TokenResponse,
   TokenValidationOptions,
 } from './types.js'
+
+// New Arctic-based plugin exports (recommended)
+export { arcticOAuthPlugin, entraProvider, googleProvider, githubProvider } from './plugin.js'
+export type {
+  ArcticOAuthPluginConfig,
+  OAuthProvider,
+  OAuthUserInfo,
+  OAuthAccount,
+  ProviderButtonInfo,
+  EntraProviderConfig,
+  GoogleProviderConfig,
+  GitHubProviderConfig,
+} from './plugin.js'
 
 const SSO_STATE_COOKIE = 'sso_state'
 

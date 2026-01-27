@@ -115,5 +115,7 @@
     ]
   },
   "registry": "https://registry.npmjs.org/",
-  "dependencies": {}
+  "dependencies": {
+    "arctic": "^3.7.0"
+  }
 }

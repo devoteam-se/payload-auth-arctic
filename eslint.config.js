@@ -2,6 +2,25 @@
 
 import payloadEsLintConfig from '@payloadcms/eslint-config'
 
+const stripPerfectionistConfig = (config) => {
+  const next = { ...config }
+
+  if (next.rules) {
+    next.rules = Object.fromEntries(
+      Object.entries(next.rules).filter(([ruleName]) => !ruleName.startsWith('perfectionist/')),
+    )
+  }
+
+  if (next.plugins && 'perfectionist' in next.plugins) {
+    const { perfectionist, ...rest } = next.plugins
+    next.plugins = rest
+  }
+
+  return next
+}
+
+const payloadConfigWithoutPerfectionist = payloadEsLintConfig.map(stripPerfectionistConfig)
+
 export const defaultESLintIgnores = [
   '**/.temp',
   '**/.*', // ignore all dotfiles
@@ -23,7 +42,7 @@ export const defaultESLintIgnores = [
 ]
 
 export default [
-  ...payloadEsLintConfig,
+  ...payloadConfigWithoutPerfectionist,
   {
     rules: {
       'no-restricted-exports': 'off',

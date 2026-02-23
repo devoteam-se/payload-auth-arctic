@@ -19,6 +19,8 @@ export interface OAuthUserInfo {
   avatarUrl?: string
   /** Raw claims from provider (for custom mapping) */
   rawClaims: Record<string, unknown>
+  /** Additional provider-specific data (e.g., Entra Graph groups/roles) */
+  providerData?: Record<string, unknown>
 }
 
 /**
@@ -66,6 +68,9 @@ export interface OAuthProvider {
 
   /** Fetch user info from provider using access token */
   getUserInfo(tokens: OAuth2Tokens): Promise<OAuthUserInfo>
+
+  /** Modify the authorization URL before redirect (e.g., add prompt=select_account) */
+  modifyAuthorizationURL?(url: URL): URL
 }
 
 /**
@@ -170,6 +175,17 @@ export interface ArcticOAuthPluginConfig {
    * @default Maps email, name to standard fields
    */
   mapUserFields?: (userInfo: OAuthUserInfo, provider: string) => Record<string, unknown>
+
+  /**
+   * Authorization gate called after user is found/created but before JWT generation.
+   * Return false or throw to reject login (redirects to failureRedirect with access_denied).
+   * Use this to restrict login by group membership, role, or other criteria.
+   */
+  authorizeLogin?: (args: {
+    user: Record<string, unknown>
+    userInfo: OAuthUserInfo
+    provider: string
+  }) => Promise<boolean>
 }
 
 /**

@@ -185,13 +185,18 @@ export const arcticOAuthPlugin =
             const codeVerifier = usesPKCE ? generateCodeVerifier() : ''
 
             // Build authorization URL (with or without PKCE)
-            const authUrl = usesPKCE
+            let authUrl = usesPKCE
               ? (client as ArcticClient).createAuthorizationURL(
                   state,
                   codeVerifier,
                   provider.defaultScopes,
                 )
               : (client as ArcticClientNoPKCE).createAuthorizationURL(state, provider.defaultScopes)
+
+            // Allow provider to modify authorization URL (e.g., add prompt param)
+            if (provider.modifyAuthorizationURL) {
+              authUrl = provider.modifyAuthorizationURL(authUrl)
+            }
 
             // Check for mobile app mode
             const mobileRedirectUri = req.query?.redirect_uri as string | undefined
@@ -336,6 +341,24 @@ export const arcticOAuthPlugin =
               })
             }
 
+            // Call authorizeLogin gate if provided
+            if (pluginConfig.authorizeLogin) {
+              const authorized = await pluginConfig.authorizeLogin({
+                user,
+                userInfo,
+                provider: providerKey,
+              })
+              if (!authorized) {
+                return new Response(null, {
+                  status: 302,
+                  headers: {
+                    Location: `${failureRedirect}&message=access_denied`,
+                    'Set-Cookie': clearCookie,
+                  },
+                })
+              }
+            }
+
             // Call afterLogin hook if provided
             if (pluginConfig.afterLogin) {
               await pluginConfig.afterLogin({ user, userInfo, provider: providerKey })
@@ -445,6 +468,37 @@ export const arcticOAuthPlugin =
       ],
     }
 
+    // SSO data fields from Graph API (stored as JSON)
+    const ssoFields: Field[] = [
+      {
+        name: 'ssoProfile',
+        type: 'json',
+        admin: {
+          readOnly: true,
+          position: 'sidebar',
+          condition: (data) => Boolean(data?.ssoProfile),
+        },
+      },
+      {
+        name: 'ssoGroups',
+        type: 'json',
+        admin: {
+          readOnly: true,
+          position: 'sidebar',
+          condition: (data) => Boolean(data?.ssoGroups),
+        },
+      },
+      {
+        name: 'ssoRoles',
+        type: 'json',
+        admin: {
+          readOnly: true,
+          position: 'sidebar',
+          condition: (data) => Boolean(data?.ssoRoles),
+        },
+      },
+    ]
+
     // Modify collections
     const collections = (config.collections || []).map((collection) => {
       if (collection.slug !== userCollection) {
@@ -465,7 +519,7 @@ export const arcticOAuthPlugin =
         ...collection,
         auth: authConfig,
         endpoints: [...(collection.endpoints || []), ...oauthEndpoints],
-        fields: [...(collection.fields || []), oauthAccountsField],
+        fields: [...(collection.fields || []), oauthAccountsField, ...ssoFields],
       }
     })
 
@@ -484,6 +538,7 @@ export const arcticOAuthPlugin =
             unique: true,
           },
           oauthAccountsField,
+          ...ssoFields,
         ],
       })
     }
@@ -535,7 +590,19 @@ async function findOrCreateUser(
   })
 
   if (existingByOAuth.docs.length > 0) {
-    return existingByOAuth.docs[0] as Record<string, unknown>
+    const existingUser = existingByOAuth.docs[0] as Record<string, unknown>
+
+    // Refresh providerData (ssoProfile, ssoGroups, ssoRoles) on every login
+    if (userInfo.providerData && Object.keys(userInfo.providerData).length > 0) {
+      const updated = await req.payload.update({
+        collection: userCollection,
+        id: existingUser.id as number | string,
+        data: userInfo.providerData,
+      })
+      return updated as Record<string, unknown>
+    }
+
+    return existingUser
   }
 
   // Try to find by email
@@ -551,7 +618,7 @@ async function findOrCreateUser(
       const existingUser = existingByEmail.docs[0] as Record<string, unknown>
       const oauthAccounts = (existingUser.oauthAccounts as Array<Record<string, unknown>>) || []
 
-      await req.payload.update({
+      const updated = await req.payload.update({
         collection: userCollection,
         id: existingUser.id as number | string,
         data: {
@@ -564,10 +631,11 @@ async function findOrCreateUser(
               connectedAt: new Date().toISOString(),
             },
           ],
+          ...(userInfo.providerData || {}),
         },
       })
 
-      return existingUser
+      return updated as Record<string, unknown>
     }
   }
 
@@ -607,6 +675,7 @@ async function findOrCreateUser(
             connectedAt: new Date().toISOString(),
           },
         ],
+        ...(userInfo.providerData || {}),
       },
     })
 

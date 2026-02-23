@@ -1,218 +1,212 @@
-# Payload Plugin Template
+# payload-auth-sso
 
-A template repo to create a [Payload CMS](https://payloadcms.com) plugin.
+OAuth/SSO plugin for [Payload CMS 3.x](https://payloadcms.com). Supports **Microsoft Entra ID**, **Google**, and **GitHub** out of the box via [Arctic](https://arcticjs.dev/).
 
-Payload is built with a robust infrastructure intended to support Plugins with ease. This provides a simple, modular, and reusable way for developers to extend the core capabilities of Payload.
+## Features
 
-To build your own Payload plugin, all you need is:
+- PKCE + state/CSRF protection on all flows
+- Microsoft Entra ID with Graph API groups/roles for access control
+- `authorizeLogin` hook to gate access by group membership or any custom logic
+- `disableLocalStrategy` for SSO-only deployments
+- Auto-creates users on first login, links OAuth accounts by email
+- UI login buttons injected into the Payload admin panel
+- Refreshes SSO data (groups, roles, profile) on every re-login
 
-- An understanding of the basic Payload concepts
-- And some JavaScript/Typescript experience
+## Installation
 
-## Background
+Install from your GitHub org:
 
-Here is a short recap on how to integrate plugins with Payload, to learn more visit the [plugin overview page](https://payloadcms.com/docs/plugins/overview).
+```bash
+# SSH
+npm install git+ssh://git@github.com:YOUR_ORG/payload-auth-sso.git
 
-### How to install a plugin
+# HTTPS
+npm install git+https://github.com/YOUR_ORG/payload-auth-sso.git
 
-To install any plugin, simply add it to your payload.config() in the Plugin array.
+# Pin to a tag
+npm install git+ssh://git@github.com:YOUR_ORG/payload-auth-sso.git#v1.0.0
+```
+
+The package builds automatically on install via the `prepare` script.
+
+## Quick Start
 
 ```ts
-import myPlugin from 'my-plugin'
+// payload.config.ts
+import { buildConfig } from 'payload'
+import { arcticOAuthPlugin, entraProvider } from 'payload-auth-sso'
 
-export const config = buildConfig({
+export default buildConfig({
+  // ...
   plugins: [
-    // You can pass options to the plugin
-    myPlugin({
-      enabled: true,
+    arcticOAuthPlugin({
+      providers: [
+        entraProvider({
+          clientId: process.env.ENTRA_CLIENT_ID!,
+          clientSecret: process.env.ENTRA_CLIENT_SECRET!,
+          tenantId: process.env.ENTRA_TENANT_ID!,
+        }),
+      ],
     }),
   ],
 })
 ```
 
-### Initialization
+## Providers
 
-The initialization process goes in the following order:
-
-1. Incoming config is validated
-2. **Plugins execute**
-3. Default options are integrated
-4. Sanitization cleans and validates data
-5. Final config gets initialized
-
-## Building the Plugin
-
-When you build a plugin, you are purely building a feature for your project and then abstracting it outside of the project.
-
-### Template Files
-
-In the Payload [plugin template](https://github.com/payloadcms/payload/tree/main/templates/plugin), you will see a common file structure that is used across all plugins:
-
-1. root folder
-2. /src folder
-3. /dev folder
-
-#### Root
-
-In the root folder, you will see various files that relate to the configuration of the plugin. We set up our environment in a similar manner in Payload core and across other projects, so hopefully these will look familiar:
-
-- **README**.md\* - This contains instructions on how to use the template. When you are ready, update this to contain instructions on how to use your Plugin.
-- **package**.json\* - Contains necessary scripts and dependencies. Overwrite the metadata in this file to describe your Plugin.
-- .**eslint**.config.js - Eslint configuration for reporting on problematic patterns.
-- .**gitignore** - List specific untracked files to omit from Git.
-- .**prettierrc**.json - Configuration for Prettier code formatting.
-- **tsconfig**.json - Configures the compiler options for TypeScript
-- .**swcrc** - Configuration for SWC, a fast compiler that transpiles and bundles TypeScript.
-- **vitest**.config.js - Config file for Vitest, defining how tests are run and how modules are resolved
-
-**IMPORTANT\***: You will need to modify these files.
-
-#### Dev
-
-In the dev folder, you’ll find a basic payload project, created with `npx create-payload-app` and the blank template.
-
-**IMPORTANT**: Make a copy of the `.env.example` file and rename it to `.env`. Update the `DATABASE_URL` to match the database you are using and your plugin name. Update `PAYLOAD_SECRET` to a unique string.
-**You will not be able to run `pnpm/yarn dev` until you have created this `.env` file.**
-
-`myPlugin` has already been added to the `payload.config()` file in this project.
+### Microsoft Entra ID
 
 ```ts
-plugins: [
-  myPlugin({
-    collections: {
-      posts: true,
-    },
-  }),
-]
-```
+entraProvider({
+  clientId: process.env.ENTRA_CLIENT_ID!,
+  clientSecret: process.env.ENTRA_CLIENT_SECRET!,
+  tenantId: process.env.ENTRA_TENANT_ID!,
 
-Later when you rename the plugin or add additional options, **make sure to update it here**.
+  // Fetch groups and roles from Microsoft Graph (optional)
+  graph: {
+    profile: true,  // Store full /me profile in ssoProfile field
+    groups: true,    // Fetch group memberships → ssoGroups field
+    roles: true,     // Fetch directory roles → ssoRoles field
+  },
 
-You may wish to add collections or expand the test project depending on the purpose of your plugin. Just make sure to keep this dev environment as simplified as possible - users should be able to install your plugin without additional configuration required.
+  // Entra login prompt behavior (default: 'select_account')
+  prompt: 'select_account',
 
-When you’re ready to start development, initiate the project with `pnpm/npm/yarn dev` and pull up [http://localhost:3000](http://localhost:3000) in your browser.
-
-#### Src
-
-Now that we have our environment setup and we have a dev project ready to - it’s time to build the plugin!
-
-**index.ts**
-
-The essence of a Payload plugin is simply to extend the payload config - and that is exactly what we are doing in this file.
-
-```ts
-export const myPlugin =
-  (pluginOptions: MyPluginConfig) =>
-  (config: Config): Config => {
-    // do cool stuff with the config here
-
-    return config
-  }
-```
-
-First, we receive the existing payload config along with any plugin options.
-
-From here, you can extend the config as you wish.
-
-Finally, you return the config and that is it!
-
-##### Spread Syntax
-
-Spread syntax (or the spread operator) is a feature in JavaScript that uses the dot notation **(...)** to spread elements from arrays, strings, or objects into various contexts.
-
-We are going to use spread syntax to allow us to add data to existing arrays without losing the existing data. It is crucial to spread the existing data correctly – else this can cause adverse behavior and conflicts with Payload config and other plugins.
-
-Let’s say you want to build a plugin that adds a new collection:
-
-```ts
-config.collections = [
-  ...(config.collections || []),
-  // Add additional collections here
-]
-```
-
-First we spread the `config.collections` to ensure that we don’t lose the existing collections, then you can add any additional collections just as you would in a regular payload config.
-
-This same logic is applied to other properties like admin, hooks, globals:
-
-```ts
-config.globals = [
-  ...(config.globals || []),
-  // Add additional globals here
-]
-
-config.hooks = {
-  ...(incomingConfig.hooks || {}),
-  // Add additional hooks here
-}
-```
-
-Some properties will be slightly different to extend, for instance the onInit property:
-
-```ts
-import { onInitExtension } from './onInitExtension' // example file
-
-config.onInit = async (payload) => {
-  if (incomingConfig.onInit) await incomingConfig.onInit(payload)
-  // Add additional onInit code by defining an onInitExtension function
-  onInitExtension(pluginOptions, payload)
-}
-```
-
-If you wish to add to the onInit, you must include the **async/await**. We don’t use spread syntax in this case, instead you must await the existing `onInit` before running additional functionality.
-
-In the template, we have stubbed out some addition `onInit` actions that seeds in a document to the `plugin-collection`, you can use this as a base point to add more actions - and if not needed, feel free to delete it.
-
-##### Types.ts
-
-If your plugin has options, you should define and provide types for these options.
-
-```ts
-export type MyPluginConfig = {
-  /**
-   * List of collections to add a custom field
-   */
-  collections?: Partial<Record<CollectionSlug, true>>
-  /**
-   * Disable the plugin
-   */
-  disabled?: boolean
-}
-```
-
-If possible, include JSDoc comments to describe the options and their types. This allows a developer to see details about the options in their editor.
-
-##### Testing
-
-Having a test suite for your plugin is essential to ensure quality and stability. **Vitest** is a fast, modern testing framework that works seamlessly with Vite and supports TypeScript out of the box.
-
-Vitest organizes tests into test suites and cases, similar to other testing frameworks. We recommend creating individual tests based on the expected behavior of your plugin from start to finish.
-
-Writing tests with Vitest is very straightforward, and you can learn more about how it works in the [Vitest documentation.](https://vitest.dev/)
-
-For this template, we stubbed out `int.spec.ts` in the `dev` folder where you can write your tests.
-
-```ts
-describe('Plugin tests', () => {
-  // Create tests to ensure expected behavior from the plugin
-  it('some condition that must be met', () => {
-   // Write your test logic here
-   expect(...)
-  })
+  // Additional scopes beyond the defaults
+  scopes: [],
 })
 ```
 
-## Best practices
+When `graph` options are enabled, the required scopes (`GroupMember.Read.All`, `Directory.Read.All`) are added automatically.
 
-With this tutorial and the plugin template, you should have everything you need to start building your own plugin.
-In addition to the setup, here are other best practices aim we follow:
+**Entra App Registration requirements:**
+- Redirect URI: `https://your-domain.com/api/users/oauth/entra/callback`
+- API permissions: `openid`, `profile`, `email`, `User.Read` (always required). Add `GroupMember.Read.All` and/or `Directory.Read.All` if using graph features.
 
-- **Providing an enable / disable option:** For a better user experience, provide a way to disable the plugin without uninstalling it. This is especially important if your plugin adds additional webpack aliases, this will allow you to still let the webpack run to prevent errors.
-- **Include tests in your GitHub CI workflow**: If you’ve configured tests for your package, integrate them into your workflow to run the tests each time you commit to the plugin repository. Learn more about [how to configure tests into your GitHub CI workflow.](https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs)
-- **Publish your finished plugin to NPM**: The best way to share and allow others to use your plugin once it is complete is to publish an NPM package. This process is straightforward and well documented, find out more [creating and publishing a NPM package here.](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/).
-- **Add payload-plugin topic tag**: Apply the tag **payload-plugin **to your GitHub repository. This will boost the visibility of your plugin and ensure it gets listed with [existing payload plugins](https://github.com/topics/payload-plugin).
-- **Use [Semantic Versioning](https://semver.org/) (SemVar)** - With the SemVar system you release version numbers that reflect the nature of changes (major, minor, patch). Ensure all major versions reference their Payload compatibility.
+### Google
 
-# Questions
+```ts
+import { googleProvider } from 'payload-auth-sso'
 
-Please contact [Payload](mailto:dev@payloadcms.com) with any questions about using this plugin template.
+googleProvider({
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+})
+```
+
+### GitHub
+
+```ts
+import { githubProvider } from 'payload-auth-sso'
+
+githubProvider({
+  clientId: process.env.GITHUB_CLIENT_ID!,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+})
+```
+
+## Plugin Options
+
+```ts
+arcticOAuthPlugin({
+  // Required
+  providers: [],
+
+  // User collection slug (default: 'users')
+  userCollection: 'users',
+
+  // Auto-create users on first login (default: true)
+  autoCreateUsers: true,
+
+  // Redirect URLs
+  successRedirect: '/admin',
+  failureRedirect: '/admin/login?error=oauth_failed',
+
+  // SSO-only mode — disables email/password login (default: false)
+  disableLocalStrategy: false,
+
+  // Enable/disable plugin (default: true)
+  enabled: true,
+
+  // Authorization gate — reject login based on user data
+  authorizeLogin: async ({ user, userInfo, provider }) => {
+    // Return false to deny access
+    return true
+  },
+
+  // Hook: modify user data before creation
+  beforeUserCreate: async ({ userInfo, provider }) => {
+    return { email: userInfo.email, name: userInfo.name }
+  },
+
+  // Hook: runs after successful login
+  afterLogin: async ({ user, userInfo, provider }) => {},
+
+  // Custom field mapping from OAuth profile to Payload user
+  mapUserFields: (userInfo, provider) => ({
+    email: userInfo.email,
+    name: userInfo.name,
+  }),
+})
+```
+
+## Restricting Access by Entra Group
+
+Use `authorizeLogin` with Entra's graph groups to restrict which users can log in:
+
+```ts
+arcticOAuthPlugin({
+  disableLocalStrategy: true,
+  providers: [
+    entraProvider({
+      clientId: process.env.ENTRA_CLIENT_ID!,
+      clientSecret: process.env.ENTRA_CLIENT_SECRET!,
+      tenantId: process.env.ENTRA_TENANT_ID!,
+      graph: { groups: true },
+    }),
+  ],
+  authorizeLogin: async ({ user }) => {
+    const groups = user.ssoGroups as Array<{ id: string }> | undefined
+    return groups?.some(g => g.id === process.env.ENTRA_ADMIN_GROUP_ID!) ?? false
+  },
+})
+```
+
+Users not in the specified group will be redirected with `?error=oauth_failed&message=access_denied`.
+
+## User Collection Fields
+
+The plugin adds these fields to your user collection automatically:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `oauthAccounts` | array | Linked OAuth accounts (provider, providerId, email, connectedAt) |
+| `ssoProfile` | json | Full Graph `/me` profile (when `graph.profile` is enabled) |
+| `ssoGroups` | json | Group memberships from Graph (when `graph.groups` is enabled) |
+| `ssoRoles` | json | Directory roles from Graph (when `graph.roles` is enabled) |
+
+All fields are read-only in the admin panel sidebar. SSO data is refreshed on every login.
+
+## How It Works
+
+1. User clicks "Sign in with Microsoft" on the Payload login page
+2. Plugin redirects to the provider's authorization URL (with PKCE + state)
+3. Provider redirects back to `/api/{collection}/oauth/{provider}/callback`
+4. Plugin exchanges the code for tokens, fetches user info (and Graph data if configured)
+5. User is found by OAuth account, matched by email, or auto-created
+6. `authorizeLogin` hook runs — rejects if it returns `false`
+7. `afterLogin` hook runs
+8. Payload JWT is generated and set as a cookie
+9. User is redirected to `successRedirect`
+
+## Development
+
+```bash
+pnpm install
+cp dev/.env.example dev/.env  # Configure your OAuth credentials
+pnpm dev                       # Starts at http://localhost:3000
+```
+
+## License
+
+MIT

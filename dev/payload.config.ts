@@ -3,13 +3,12 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import path from 'path'
 import { buildConfig } from 'payload'
-import { arcticOAuthPlugin, entraProvider, googleProvider } from 'payload-auth-sso'
+import { arcticOAuthPlugin, entraProvider } from 'cadeler-auth-plugin'
 import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 
 import { testEmailAdapter } from './helpers/testEmailAdapter.js'
 import { seed } from './seed.js'
-//import { facebookProvider } from '../src/providers/facebook.js'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -61,26 +60,12 @@ const buildConfigWithMemoryDB = async () => {
     plugins: [
       arcticOAuthPlugin({
         disableLocalStrategy: true,
-        enableMobileAuth: false,
-        allowedMobileRedirectUris: [
-          'myapp://auth/callback',
-          'com.mycompany.myapp://auth/callback',
-          'http://localhost:3000/auth-test*', // For browser testing
-        ],
         providers: [
           entraProvider({
             clientId: process.env.ENTRA_CLIENT_ID || '',
             clientSecret: process.env.ENTRA_CLIENT_SECRET || '',
             tenantId: process.env.ENTRA_TENANT_ID || '',
           }),
-          googleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID || '',
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-          }),
-          /*facebookProvider({
-            clientId: '1213884063588155',
-            clientSecret: '73221c83cd62663d38fe17efb47e6793',
-          }),*/
         ],
       }),
     ],

@@ -19,14 +19,11 @@
       "@payload-config": [
         "./payload.config.ts"
       ],
-      "payload-auth-sso": [
+      "cadeler-auth-plugin": [
         "../src/index.ts"
       ],
-      "payload-auth-sso/client": [
+      "cadeler-auth-plugin/client": [
         "../src/exports/client.ts"
-      ],
-      "payload-auth-sso/rsc": [
-        "../src/exports/rsc.ts"
       ]
     },
     "noEmit": true,

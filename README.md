@@ -1,6 +1,6 @@
-# payload-auth-sso
+# cadeler-auth-plugin
 
-OAuth/SSO plugin for [Payload CMS 3.x](https://payloadcms.com). Supports **Microsoft Entra ID**, **Google**, and **GitHub** out of the box via [Arctic](https://arcticjs.dev/).
+Microsoft Entra ID SSO plugin for [Payload CMS 3.x](https://payloadcms.com) via [Arctic](https://arcticjs.dev/).
 
 ## Features
 
@@ -18,13 +18,13 @@ Install from your GitHub org:
 
 ```bash
 # SSH
-npm install git+ssh://git@github.com:YOUR_ORG/payload-auth-sso.git
+npm install git+ssh://git@github.com:YOUR_ORG/cadeler-auth-plugin.git
 
 # HTTPS
-npm install git+https://github.com/YOUR_ORG/payload-auth-sso.git
+npm install git+https://github.com/YOUR_ORG/cadeler-auth-plugin.git
 
 # Pin to a tag
-npm install git+ssh://git@github.com:YOUR_ORG/payload-auth-sso.git#v1.0.0
+npm install git+ssh://git@github.com:YOUR_ORG/cadeler-auth-plugin.git#v1.0.0
 ```
 
 The package builds automatically on install via the `prepare` script.
@@ -34,7 +34,7 @@ The package builds automatically on install via the `prepare` script.
 ```ts
 // payload.config.ts
 import { buildConfig } from 'payload'
-import { arcticOAuthPlugin, entraProvider } from 'payload-auth-sso'
+import { arcticOAuthPlugin, entraProvider } from 'cadeler-auth-plugin'
 
 export default buildConfig({
   // ...
@@ -52,9 +52,7 @@ export default buildConfig({
 })
 ```
 
-## Providers
-
-### Microsoft Entra ID
+## Entra ID Configuration
 
 ```ts
 entraProvider({
@@ -82,28 +80,6 @@ When `graph` options are enabled, the required scopes (`GroupMember.Read.All`, `
 **Entra App Registration requirements:**
 - Redirect URI: `https://your-domain.com/api/users/oauth/entra/callback`
 - API permissions: `openid`, `profile`, `email`, `User.Read` (always required). Add `GroupMember.Read.All` and/or `Directory.Read.All` if using graph features.
-
-### Google
-
-```ts
-import { googleProvider } from 'payload-auth-sso'
-
-googleProvider({
-  clientId: process.env.GOOGLE_CLIENT_ID!,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-})
-```
-
-### GitHub
-
-```ts
-import { githubProvider } from 'payload-auth-sso'
-
-githubProvider({
-  clientId: process.env.GITHUB_CLIENT_ID!,
-  clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-})
-```
 
 ## Plugin Options
 
@@ -190,8 +166,8 @@ All fields are read-only in the admin panel sidebar. SSO data is refreshed on ev
 ## How It Works
 
 1. User clicks "Sign in with Microsoft" on the Payload login page
-2. Plugin redirects to the provider's authorization URL (with PKCE + state)
-3. Provider redirects back to `/api/{collection}/oauth/{provider}/callback`
+2. Plugin redirects to Entra's authorization URL (with PKCE + state)
+3. Entra redirects back to `/api/{collection}/oauth/entra/callback`
 4. Plugin exchanges the code for tokens, fetches user info (and Graph data if configured)
 5. User is found by OAuth account, matched by email, or auto-created
 6. `authorizeLogin` hook runs — rejects if it returns `false`
@@ -203,7 +179,7 @@ All fields are read-only in the admin panel sidebar. SSO data is refreshed on ev
 
 ```bash
 pnpm install
-cp dev/.env.example dev/.env  # Configure your OAuth credentials
+cp dev/.env.example dev/.env  # Configure your Entra credentials
 pnpm dev                       # Starts at http://localhost:3000
 ```
 

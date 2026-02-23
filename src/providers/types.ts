@@ -135,24 +135,6 @@ export interface ArcticOAuthPluginConfig {
   disableLocalStrategy?: boolean
 
   /**
-   * Enable mobile app authentication mode (Expo AuthSession, etc.)
-   * When enabled, adds support for:
-   * - Custom redirect URIs (deep links like myapp://)
-   * - Token returned in redirect URL params instead of cookies
-   * - CORS headers for mobile app requests
-   * @default false
-   */
-  enableMobileAuth?: boolean
-
-  /**
-   * Allowed redirect URI patterns for mobile app mode
-   * Supports wildcards: ['myapp://*', 'exp://192.168.*']
-   * Only used when enableMobileAuth is true
-   * @default []
-   */
-  allowedMobileRedirectUris?: string[]
-
-  /**
    * Hook called before user creation
    * Return modified data or throw to reject
    */
@@ -200,11 +182,6 @@ export interface OAuthStateData {
   provider: string
   /** URL to redirect after successful login */
   returnTo?: string
-  /**
-   * Mobile app mode - when true, token is returned in redirect URL
-   * instead of being set as a cookie
-   */
-  mobileApp?: boolean
 }
 
 /**

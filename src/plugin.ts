@@ -12,8 +12,6 @@ import type {
 
 // Re-export provider types and factories
 export { entraProvider, type EntraProviderConfig } from './providers/entra.js'
-export { googleProvider, type GoogleProviderConfig } from './providers/google.js'
-export { githubProvider, type GitHubProviderConfig } from './providers/github.js'
 export type {
   ArcticOAuthPluginConfig,
   OAuthProvider,
@@ -41,24 +39,6 @@ function decodeState(encoded: string): OAuthStateData | null {
   } catch {
     return null
   }
-}
-
-/**
- * Validate a redirect URI against allowed patterns
- * Supports wildcard patterns like 'myapp://*' or 'exp://192.168.*'
- */
-function isRedirectUriAllowed(uri: string, allowedPatterns: string[]): boolean {
-  for (const pattern of allowedPatterns) {
-    // Convert wildcard pattern to regex
-    const regexPattern = pattern
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars except *
-      .replace(/\*/g, '.*') // Convert * to .*
-    const regex = new RegExp(`^${regexPattern}$`)
-    if (regex.test(uri)) {
-      return true
-    }
-  }
-  return false
 }
 
 /**
@@ -98,7 +78,7 @@ function getSearchParams(req: PayloadRequest): URLSearchParams {
  *
  * @example
  * ```ts
- * import { arcticOAuthPlugin, entraProvider, googleProvider } from 'payload-auth-sso'
+ * import { arcticOAuthPlugin, entraProvider } from 'cadeler-auth-plugin'
  *
  * export default buildConfig({
  *   plugins: [
@@ -108,10 +88,6 @@ function getSearchParams(req: PayloadRequest): URLSearchParams {
  *           clientId: process.env.ENTRA_CLIENT_ID!,
  *           clientSecret: process.env.ENTRA_CLIENT_SECRET!,
  *           tenantId: process.env.ENTRA_TENANT_ID!,
- *         }),
- *         googleProvider({
- *           clientId: process.env.GOOGLE_CLIENT_ID!,
- *           clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
  *         }),
  *       ],
  *     }),
@@ -131,8 +107,6 @@ export const arcticOAuthPlugin =
       failureRedirect = '/admin/login?error=oauth_failed',
       enabled = true,
       disableLocalStrategy = false,
-      enableMobileAuth = false,
-      allowedMobileRedirectUris = [],
     } = pluginConfig
 
     if (!enabled) {
@@ -198,23 +172,12 @@ export const arcticOAuthPlugin =
               authUrl = provider.modifyAuthorizationURL(authUrl)
             }
 
-            // Check for mobile app mode
-            const mobileRedirectUri = req.query?.redirect_uri as string | undefined
-            const isMobileApp = Boolean(
-              enableMobileAuth &&
-              mobileRedirectUri &&
-              isRedirectUriAllowed(mobileRedirectUri, allowedMobileRedirectUris),
-            )
-
             // Store state data in cookie
             const stateData: OAuthStateData = {
               state,
               codeVerifier,
               provider: providerKey,
-              returnTo: isMobileApp
-                ? mobileRedirectUri
-                : (req.query?.returnTo as string) || successRedirect,
-              mobileApp: isMobileApp || undefined,
+              returnTo: (req.query?.returnTo as string) || successRedirect,
             }
 
             return new Response(null, {
@@ -385,23 +348,7 @@ export const arcticOAuthPlugin =
               tokenExpiration,
             })
 
-            // Handle mobile app mode - return token in URL instead of cookie
-            if (stateData.mobileApp && stateData.returnTo) {
-              const mobileRedirectUrl = new URL(stateData.returnTo)
-              mobileRedirectUrl.searchParams.set('token', payloadToken)
-              mobileRedirectUrl.searchParams.set('expires_in', String(tokenExpiration))
-              mobileRedirectUrl.searchParams.set('user_id', String(user.id))
-
-              return new Response(null, {
-                status: 302,
-                headers: {
-                  Location: mobileRedirectUrl.toString(),
-                  'Set-Cookie': clearCookie,
-                },
-              })
-            }
-
-            // Standard web mode - set token as cookie using Payload's cookie generator
+            // Set token as cookie using Payload's cookie generator
             const cookiePrefix = req.payload.config.cookiePrefix || 'payload'
 
             // The collectionConfig.auth is already the sanitized auth config from Payload
@@ -554,7 +501,7 @@ export const arcticOAuthPlugin =
       config.admin.components.afterLogin = []
     }
 
-    config.admin.components.afterLogin.push('payload-auth-sso/client#OAuthButtons')
+    config.admin.components.afterLogin.push('cadeler-auth-plugin/client#OAuthButtons')
 
     return {
       ...config,

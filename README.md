@@ -1,6 +1,6 @@
-# cadeler-auth-plugin
+# payload-auth-arctic
 
-Microsoft Entra ID SSO plugin for [Payload CMS 3.x](https://payloadcms.com) via [Arctic](https://arcticjs.dev/).
+OAuth SSO plugin for [Payload CMS 3.x](https://payloadcms.com) powered by [Arctic](https://arcticjs.dev/).
 
 ## Features
 
@@ -14,27 +14,16 @@ Microsoft Entra ID SSO plugin for [Payload CMS 3.x](https://payloadcms.com) via 
 
 ## Installation
 
-Install from your GitHub org:
-
 ```bash
-# SSH
-npm install git+ssh://git@github.com:YOUR_ORG/cadeler-auth-plugin.git
-
-# HTTPS
-npm install git+https://github.com/YOUR_ORG/cadeler-auth-plugin.git
-
-# Pin to a tag
-npm install git+ssh://git@github.com:YOUR_ORG/cadeler-auth-plugin.git#v1.0.0
+npm install payload-auth-arctic
 ```
-
-The package builds automatically on install via the `prepare` script.
 
 ## Quick Start
 
 ```ts
 // payload.config.ts
 import { buildConfig } from 'payload'
-import { arcticOAuthPlugin, entraProvider } from 'cadeler-auth-plugin'
+import { arcticOAuthPlugin, entraProvider } from 'payload-auth-arctic'
 
 export default buildConfig({
   // ...

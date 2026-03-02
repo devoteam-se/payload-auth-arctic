@@ -1,8 +1,25 @@
 {
-  "name": "cadeler-auth-plugin",
+  "name": "payload-auth-arctic",
   "version": "1.0.0",
-  "description": "Microsoft Entra ID SSO plugin for Payload CMS 3.x via Arctic",
+  "description": "OAuth SSO plugin for Payload CMS 3.x powered by Arctic",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devoteam-se/payload-auth-arctic.git"
+  },
+  "homepage": "https://github.com/devoteam-se/payload-auth-arctic#readme",
+  "bugs": "https://github.com/devoteam-se/payload-auth-arctic/issues",
+  "keywords": [
+    "payload",
+    "payloadcms",
+    "oauth",
+    "sso",
+    "arctic",
+    "entra",
+    "azure-ad",
+    "microsoft",
+    "authentication"
+  ],
   "type": "module",
   "exports": {
     ".": {

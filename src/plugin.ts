@@ -1,4 +1,5 @@
-import type { Config, Endpoint, Field, PayloadRequest } from 'payload'
+import type { AuthStrategy, Config, Endpoint, Field, PayloadRequest } from 'payload'
+import { JWTAuthentication } from 'payload'
 import { generateState, generateCodeVerifier } from 'arctic'
 
 import type {
@@ -78,7 +79,7 @@ function getSearchParams(req: PayloadRequest): URLSearchParams {
  *
  * @example
  * ```ts
- * import { arcticOAuthPlugin, entraProvider } from 'cadeler-auth-plugin'
+ * import { arcticOAuthPlugin, entraProvider } from 'payload-auth-arctic'
  *
  * export default buildConfig({
  *   plugins: [
@@ -362,15 +363,13 @@ export const arcticOAuthPlugin =
               token: payloadToken,
             })
 
-            // Use Headers object to properly set multiple cookies
-            const headers = new Headers()
-            headers.set('Location', stateData.returnTo || successRedirect)
-            headers.append('Set-Cookie', payloadCookie)
-            headers.append('Set-Cookie', clearCookie)
-
+            // Set auth cookie and redirect (state cookie expires on its own via Max-Age)
             return new Response(null, {
               status: 302,
-              headers,
+              headers: {
+                Location: stateData.returnTo || successRedirect,
+                'Set-Cookie': payloadCookie,
+              },
             })
           } catch (error) {
             console.error(`OAuth callback error (${providerKey}):`, error)
@@ -460,6 +459,20 @@ export const arcticOAuthPlugin =
         } else if (typeof authConfig === 'object') {
           authConfig = { ...authConfig, disableLocalStrategy: true }
         }
+
+        // When disableLocalStrategy is true, Payload skips registering the
+        // built-in 'local-jwt' auth strategy, which breaks cookie-based
+        // authentication entirely. We must inject the JWT strategy ourselves.
+        if (typeof authConfig === 'object') {
+          const existing = (authConfig as { strategies?: AuthStrategy[] }).strategies || []
+          authConfig = {
+            ...authConfig,
+            strategies: [
+              ...existing,
+              { name: 'oauth-jwt', authenticate: JWTAuthentication },
+            ],
+          }
+        }
       }
 
       return {
@@ -475,7 +488,12 @@ export const arcticOAuthPlugin =
     if (!hasUserCollection) {
       collections.push({
         slug: userCollection,
-        auth: disableLocalStrategy ? { disableLocalStrategy: true } : true,
+        auth: disableLocalStrategy
+          ? {
+              disableLocalStrategy: true,
+              strategies: [{ name: 'oauth-jwt', authenticate: JWTAuthentication }],
+            }
+          : true,
         endpoints: oauthEndpoints,
         fields: [
           {
@@ -501,7 +519,7 @@ export const arcticOAuthPlugin =
       config.admin.components.afterLogin = []
     }
 
-    config.admin.components.afterLogin.push('cadeler-auth-plugin/client#OAuthButtons')
+    config.admin.components.afterLogin.push('payload-auth-arctic/client#OAuthButtons')
 
     return {
       ...config,

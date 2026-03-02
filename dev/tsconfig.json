@@ -19,10 +19,10 @@
       "@payload-config": [
         "./payload.config.ts"
       ],
-      "cadeler-auth-plugin": [
+      "payload-auth-arctic": [
         "../src/index.ts"
       ],
-      "cadeler-auth-plugin/client": [
+      "payload-auth-arctic/client": [
         "../src/exports/client.ts"
       ]
     },

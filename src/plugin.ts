@@ -43,6 +43,14 @@ function decodeState(encoded: string): OAuthStateData | null {
 }
 
 /**
+ * Build a Set-Cookie header string with Secure flag conditional on protocol.
+ * Browsers reject Secure cookies on plain HTTP, which breaks localhost dev flows.
+ */
+function buildStateCookie(value: string, isSecure: boolean, maxAge: number): string {
+  return `${OAUTH_STATE_COOKIE}=${value}; HttpOnly;${isSecure ? ' Secure;' : ''} SameSite=Lax; Path=/; Max-Age=${maxAge}`
+}
+
+/**
  * Get the base URL from a PayloadRequest
  */
 function getBaseUrl(req: PayloadRequest): string {
@@ -152,6 +160,7 @@ export const arcticOAuthPlugin =
         handler: async (req: PayloadRequest) => {
           try {
             const baseUrl = getBaseUrl(req)
+            const isSecure = baseUrl.startsWith('https')
             const redirectUri = `${baseUrl}/api/${userCollection}/oauth/${providerKey}/callback`
 
             const client = provider.createClient(redirectUri)
@@ -185,7 +194,7 @@ export const arcticOAuthPlugin =
               status: 302,
               headers: {
                 Location: authUrl.toString(),
-                'Set-Cookie': `${OAUTH_STATE_COOKIE}=${encodeState(stateData)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${COOKIE_MAX_AGE}`,
+                'Set-Cookie': buildStateCookie(encodeState(stateData), isSecure, COOKIE_MAX_AGE),
               },
             })
           } catch (error) {
@@ -205,7 +214,9 @@ export const arcticOAuthPlugin =
         path: `/oauth/${providerKey}/callback`,
         method: 'get',
         handler: async (req: PayloadRequest) => {
-          const clearCookie = `${OAUTH_STATE_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
+          const baseUrl = getBaseUrl(req)
+          const isSecure = baseUrl.startsWith('https')
+          const clearCookie = buildStateCookie('', isSecure, 0)
 
           try {
             const searchParams = getSearchParams(req)
@@ -228,6 +239,7 @@ export const arcticOAuthPlugin =
             }
 
             if (!code || !returnedState) {
+              console.warn(`[payload-auth-arctic] OAuth callback (${providerKey}): missing code or state parameter`)
               return new Response(null, {
                 status: 302,
                 headers: {
@@ -242,6 +254,11 @@ export const arcticOAuthPlugin =
             const stateCookieMatch = cookieHeader.match(new RegExp(`${OAUTH_STATE_COOKIE}=([^;]+)`))
 
             if (!stateCookieMatch) {
+              console.warn(
+                `[payload-auth-arctic] OAuth callback (${providerKey}): state cookie not found. ` +
+                `This commonly happens when the cookie was set with the Secure flag on an HTTP connection. ` +
+                `Base URL: ${baseUrl}`,
+              )
               return new Response(null, {
                 status: 302,
                 headers: {
@@ -257,6 +274,10 @@ export const arcticOAuthPlugin =
               stateData.state !== returnedState ||
               stateData.provider !== providerKey
             ) {
+              console.warn(
+                `[payload-auth-arctic] OAuth callback (${providerKey}): state validation failed. ` +
+                `Expected provider: ${providerKey}, got: ${stateData?.provider ?? 'null'}`,
+              )
               return new Response(null, {
                 status: 302,
                 headers: {
@@ -267,7 +288,6 @@ export const arcticOAuthPlugin =
             }
 
             // Exchange code for tokens using Arctic
-            const baseUrl = getBaseUrl(req)
             const redirectUri = `${baseUrl}/api/${userCollection}/oauth/${providerKey}/callback`
             const client = provider.createClient(redirectUri)
             const usesPKCE = provider.supportsPKCE !== false
@@ -296,6 +316,7 @@ export const arcticOAuthPlugin =
             })
 
             if (!user) {
+              console.warn(`[payload-auth-arctic] OAuth callback (${providerKey}): no user found or created for ${userInfo.email}`)
               return new Response(null, {
                 status: 302,
                 headers: {
@@ -313,6 +334,7 @@ export const arcticOAuthPlugin =
                 provider: providerKey,
               })
               if (!authorized) {
+                console.warn(`[payload-auth-arctic] OAuth callback (${providerKey}): authorizeLogin denied access for ${(user as Record<string, unknown>).email || (user as Record<string, unknown>).id}`)
                 return new Response(null, {
                   status: 302,
                   headers: {

@@ -1,5 +1,70 @@
-import { JWTAuthentication } from 'payload';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { generateState, generateCodeVerifier } from 'arctic';
+/**
+ * Verify an HS256 JWT using Node.js built-in crypto.
+ * Avoids depending on jsonwebtoken (transitive dep not accessible in pnpm strict mode).
+ */ function verifyHS256(token, secret) {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, payload, signature] = parts;
+    const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest();
+    const actual = Buffer.from(signature, 'base64url');
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    // Check expiration
+    if (typeof decoded.exp === 'number' && decoded.exp < Date.now() / 1000) return null;
+    return decoded;
+}
+/**
+ * Custom JWT authentication strategy for OAuth.
+ * Replaces Payload's built-in JWTAuthentication which doesn't work
+ * in the Next.js runtime when used with disableLocalStrategy.
+ */ const oauthJWTAuthenticate = async ({ headers, payload })=>{
+    try {
+        const cookiePrefix = payload.config.cookiePrefix || 'payload';
+        const cookieName = `${cookiePrefix}-token`;
+        const cookieHeader = headers.get('cookie') || '';
+        // Extract token from cookie or Authorization header
+        let token = null;
+        const cookieMatch = cookieHeader.match(new RegExp(`${cookieName}=([^;]+)`));
+        if (cookieMatch) {
+            token = cookieMatch[1];
+        } else {
+            const authHeader = headers.get('authorization') || '';
+            if (authHeader.startsWith('JWT ') || authHeader.startsWith('Bearer ')) {
+                token = authHeader.split(' ')[1];
+            }
+        }
+        if (!token) return {
+            user: null
+        };
+        const decoded = verifyHS256(token, payload.secret);
+        if (!decoded?.id || !decoded?.collection) return {
+            user: null
+        };
+        // Look up the user
+        const user = await payload.findByID({
+            collection: decoded.collection,
+            id: decoded.id,
+            overrideAccess: true
+        });
+        if (!user) return {
+            user: null
+        };
+        return {
+            user: {
+                ...user,
+                collection: decoded.collection,
+                _strategy: 'oauth-jwt'
+            }
+        };
+    } catch (error) {
+        console.error('[payload-auth-arctic] JWT authentication error:', error);
+        return {
+            user: null
+        };
+    }
+};
 // Re-export provider types and factories
 export { entraProvider } from './providers/entra.js';
 const OAUTH_STATE_COOKIE = 'oauth_state';
@@ -409,7 +474,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                             ...existing,
                             {
                                 name: 'oauth-jwt',
-                                authenticate: JWTAuthentication
+                                authenticate: oauthJWTAuthenticate
                             }
                         ]
                     };
@@ -439,7 +504,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                     strategies: [
                         {
                             name: 'oauth-jwt',
-                            authenticate: JWTAuthentication
+                            authenticate: oauthJWTAuthenticate
                         }
                     ]
                 } : true,

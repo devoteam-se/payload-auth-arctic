@@ -379,11 +379,16 @@ export const arcticOAuthPlugin =
             const authConfig = collectionConfig.auth
 
             // Generate the payload token cookie using Payload's utility
-            const payloadCookie = generatePayloadCookie({
+            let payloadCookie = generatePayloadCookie({
               collectionAuthConfig: authConfig,
               cookiePrefix,
               token: payloadToken,
             })
+
+            // Strip Secure flag on HTTP — browsers reject Secure cookies on plain HTTP
+            if (!isSecure) {
+              payloadCookie = payloadCookie.replace(/;\s*Secure/i, '')
+            }
 
             // Set auth cookie and redirect (state cookie expires on its own via Max-Age)
             return new Response(null, {

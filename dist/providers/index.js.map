@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../src/providers/index.ts"],"sourcesContent":["export { entraProvider, type EntraProviderConfig } from './entra.js'\nexport type {\n  ArcticOAuthPluginConfig,\n  OAuthProvider,\n  OAuthUserInfo,\n  OAuthAccount,\n  OAuthStateData,\n  ProviderButtonInfo,\n} from './types.js'\n"],"names":["entraProvider"],"mappings":"AAAA,SAASA,aAAa,QAAkC,aAAY"}

@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../src/exports/client.ts"],"sourcesContent":["export { OAuthButtons } from '../components/OAuthButtons.js'\n"],"names":["OAuthButtons"],"mappings":"AAAA,SAASA,YAAY,QAAQ,gCAA+B"}

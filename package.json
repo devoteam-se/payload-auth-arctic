@@ -40,7 +40,7 @@
   ],
   "scripts": {
     "build": "npm run copyfiles && npm run build:types && npm run build:swc",
-    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
     "build:swc": "swc ./src -d ./dist --config-file .swcrc --strip-leading-paths",
     "build:types": "tsc --outDir dist --rootDir ./src",
     "clean": "rimraf {dist,*.tsbuildinfo}",

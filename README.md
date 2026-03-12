@@ -14,9 +14,22 @@ OAuth SSO plugin for [Payload CMS 3.x](https://payloadcms.com) powered by [Arcti
 
 ## Installation
 
+From npm:
+
 ```bash
 npm install payload-auth-arctic
 ```
+
+Or install directly from GitHub:
+
+```bash
+npm install git+ssh://git@github.com:devoteam-se/payload-auth-arctic.git
+
+# Pin to a specific tag
+npm install git+ssh://git@github.com:devoteam-se/payload-auth-arctic.git#v1.0.0
+```
+
+The package builds automatically on install via the `prepare` script.
 
 ## Quick Start
 
@@ -152,6 +165,63 @@ The plugin adds these fields to your user collection automatically:
 
 All fields are read-only in the admin panel sidebar. SSO data is refreshed on every login.
 
+## Session Support (Payload 3.74+)
+
+Payload 3.74.0 introduced `useSessions: true` as the default for auth collections. The built-in JWT strategy rejects tokens that don't contain a valid `sid` (session ID) matching a session stored on the user document.
+
+This plugin handles sessions automatically:
+
+- **Payload 3.74+** (`useSessions: true`): On OAuth login, the plugin creates a session on the user document and includes the `sid` in the JWT. The custom `oauth-jwt` strategy (used when `disableLocalStrategy: true`) validates the session on each request, matching Payload's built-in behavior.
+- **Payload < 3.74** (`useSessions` absent): Session logic is skipped entirely. Authentication works with stateless JWTs as before.
+
+No configuration is needed — the plugin detects `useSessions` at runtime.
+
+## Frontend Login
+
+The admin panel login works out of the box. For **custom frontend pages** that need OAuth login with redirect-back support, the package exports a React hook and a plain utility function.
+
+### React Hook
+
+```tsx
+'use client'
+import { useOAuthProviders } from 'payload-auth-arctic/client'
+
+export default function LoginPage() {
+  const { providers, isLoading, login } = useOAuthProviders()
+
+  return (
+    <div>
+      {providers.map((provider) => (
+        <button key={provider.key} onClick={() => login(provider, '/dashboard')}>
+          Sign in with {provider.displayName}
+        </button>
+      ))}
+    </div>
+  )
+}
+```
+
+The second argument to `login()` is `returnTo` — the URL to redirect to after OAuth completes. If omitted, the plugin's `successRedirect` (default `/admin`) is used.
+
+If your user collection isn't `'users'`, pass it as an option:
+
+```ts
+const { providers, login } = useOAuthProviders({ userCollection: 'members' })
+```
+
+### Plain Utility
+
+For server components, vanilla JS, or anywhere you just need the URL:
+
+```ts
+import { getOAuthLoginUrl } from 'payload-auth-arctic'
+// or from the client entrypoint:
+import { getOAuthLoginUrl } from 'payload-auth-arctic/client'
+
+const url = getOAuthLoginUrl('/api/users/oauth/entra', '/dashboard')
+// → "/api/users/oauth/entra?returnTo=%2Fdashboard"
+```
+
 ## How It Works
 
 1. User clicks "Sign in with Microsoft" on the Payload login page
@@ -161,8 +231,9 @@ All fields are read-only in the admin panel sidebar. SSO data is refreshed on ev
 5. User is found by OAuth account, matched by email, or auto-created
 6. `authorizeLogin` hook runs — rejects if it returns `false`
 7. `afterLogin` hook runs
-8. Payload JWT is generated and set as a cookie
-9. User is redirected to `successRedirect`
+8. A session is created on the user document (Payload 3.74+ only)
+9. Payload JWT is generated (with `sid` if sessions are enabled) and set as a cookie
+10. User is redirected to `successRedirect`
 
 ## Development
 

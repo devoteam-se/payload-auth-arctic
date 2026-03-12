@@ -70,6 +70,7 @@
     "@swc-node/register": "1.10.9",
     "@swc/cli": "0.6.0",
     "@types/node": "^22.5.4",
+    "@types/uuid": "^10.0.0",
     "@types/react": "19.2.1",
     "@types/react-dom": "19.2.1",
     "copyfiles": "2.4.1",
@@ -107,6 +108,8 @@
     ]
   },
   "dependencies": {
-    "arctic": "^3.7.0"
+    "arctic": "^3.7.0",
+    "jose": "^6.0.11",
+    "uuid": "^11.1.0"
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useOAuthProviders } from '../hooks/useOAuthProviders.js';
 /**
  * Provider icons - add more as needed
  */ const providerIcons = {
@@ -66,25 +67,14 @@ import { useEffect, useState } from 'react';
         })
     ]
 });
-export const OAuthButtons = ()=>{
-    const [providers, setProviders] = useState([]);
+export const OAuthButtons = ({ userCollection } = {})=>{
+    const { providers, disableLocalStrategy, login } = useOAuthProviders({
+        userCollection
+    });
     const [loadingProvider, setLoadingProvider] = useState(null);
-    const [disableLocalStrategy, setDisableLocalStrategy] = useState(false);
-    useEffect(()=>{
-        // Fetch available providers from the API
-        fetch('/api/users/oauth/providers').then((res)=>res.json()).then((data)=>{
-            if (Array.isArray(data)) {
-                setProviders(data);
-                setDisableLocalStrategy(false);
-                return;
-            }
-            setProviders(data.providers);
-            setDisableLocalStrategy(Boolean(data.disableLocalStrategy));
-        }).catch((err)=>console.error('Failed to load OAuth providers:', err));
-    }, []);
     const handleClick = (provider)=>{
         setLoadingProvider(provider.key);
-        window.location.href = provider.authorizePath;
+        login(provider);
     };
     if (providers.length === 0) {
         return null;

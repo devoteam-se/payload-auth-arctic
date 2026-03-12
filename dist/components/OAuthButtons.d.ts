@@ -1,1 +1,3 @@
-export declare const OAuthButtons: () => import("react").JSX.Element | null;
+export declare const OAuthButtons: ({ userCollection }?: {
+    userCollection?: string;
+}) => import("react").JSX.Element | null;

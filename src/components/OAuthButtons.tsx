@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ProviderButtonInfo } from '../providers/types.js'
+import { useOAuthProviders } from '../hooks/useOAuthProviders.js'
 
 /**
  * Provider icons - add more as needed
@@ -36,36 +37,13 @@ const defaultIcon = (
   </svg>
 )
 
-type ProvidersResponse = {
-  providers: ProviderButtonInfo[]
-  disableLocalStrategy?: boolean
-}
-
-export const OAuthButtons = () => {
-  const [providers, setProviders] = useState<ProviderButtonInfo[]>([])
+export const OAuthButtons = ({ userCollection }: { userCollection?: string } = {}) => {
+  const { providers, disableLocalStrategy, login } = useOAuthProviders({ userCollection })
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
-  const [disableLocalStrategy, setDisableLocalStrategy] = useState<boolean>(false)
-
-  useEffect(() => {
-    // Fetch available providers from the API
-    fetch('/api/users/oauth/providers')
-      .then((res) => res.json())
-      .then((data: ProvidersResponse | ProviderButtonInfo[]) => {
-        if (Array.isArray(data)) {
-          setProviders(data)
-          setDisableLocalStrategy(false)
-          return
-        }
-
-        setProviders(data.providers)
-        setDisableLocalStrategy(Boolean(data.disableLocalStrategy))
-      })
-      .catch((err) => console.error('Failed to load OAuth providers:', err))
-  }, [])
 
   const handleClick = (provider: ProviderButtonInfo) => {
     setLoadingProvider(provider.key)
-    window.location.href = provider.authorizePath
+    login(provider)
   }
 
   if (providers.length === 0) {

@@ -1,75 +1,51 @@
 import type { AuthStrategy, AuthStrategyFunction, Config, Endpoint, Field, PayloadRequest } from 'payload'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { jwtVerify } from 'jose'
 import { generateState, generateCodeVerifier } from 'arctic'
 
 /**
- * Verify an HS256 JWT using Node.js built-in crypto.
- * Avoids depending on jsonwebtoken (transitive dep not accessible in pnpm strict mode).
- */
-function verifyHS256(token: string, secret: string): Record<string, unknown> | null {
-  const parts = token.split('.')
-  if (parts.length !== 3) return null
-
-  const [header, payload, signature] = parts
-  const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest()
-  const actual = Buffer.from(signature, 'base64url')
-
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null
-
-  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString()) as Record<string, unknown>
-
-  // Check expiration
-  if (typeof decoded.exp === 'number' && decoded.exp < Date.now() / 1000) return null
-
-  return decoded
-}
-
-/**
  * Custom JWT authentication strategy for OAuth.
- * Replaces Payload's built-in JWTAuthentication which doesn't work
- * in the Next.js runtime when used with disableLocalStrategy.
+ * Uses extractJWT from payload and jwtVerify from jose — mirrors
+ * Payload's built-in JWTAuthentication so session validation works.
  */
-const oauthJWTAuthenticate: AuthStrategyFunction = async ({ headers, payload }) => {
+const oauthJWTAuthenticate: AuthStrategyFunction = async ({ headers, payload, strategyName = 'oauth-jwt' }) => {
   try {
-    const cookiePrefix = payload.config.cookiePrefix || 'payload'
-    const cookieName = `${cookiePrefix}-token`
-    const cookieHeader = headers.get('cookie') || ''
-
-    // Extract token from cookie or Authorization header
-    let token: string | null = null
-    const cookieMatch = cookieHeader.match(new RegExp(`${cookieName}=([^;]+)`))
-    if (cookieMatch) {
-      token = cookieMatch[1]
-    } else {
-      const authHeader = headers.get('authorization') || ''
-      if (authHeader.startsWith('JWT ') || authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1]
-      }
-    }
-
+    const { extractJWT } = await import('payload')
+    const token = extractJWT({ headers, payload })
     if (!token) return { user: null }
 
-    const decoded = verifyHS256(token, payload.secret)
+    const secretKey = new TextEncoder().encode(payload.secret)
+    const { payload: decoded } = await jwtVerify(token, secretKey)
+
     if (!decoded?.id || !decoded?.collection) return { user: null }
 
-    // Look up the user
+    const collection = payload.collections[decoded.collection as string]
+    if (!collection) return { user: null }
+
     const user = await payload.findByID({
-      collection: decoded.collection as string,
       id: decoded.id as string,
+      collection: decoded.collection as string,
+      depth: (collection.config.auth as unknown as Record<string, unknown>)?.depth as number ?? 0,
       overrideAccess: true,
-    })
+    }) as Record<string, unknown>
 
     if (!user) return { user: null }
 
-    return {
-      user: {
-        ...user,
-        collection: decoded.collection as string,
-        _strategy: 'oauth-jwt',
-      },
+    // Session validation — matches Payload's built-in JWTAuthentication (3.74.0+)
+    const useSessions = (collection.config.auth as unknown as Record<string, unknown>)?.useSessions
+    if (useSessions) {
+      const sessions = (user.sessions || []) as Array<{ id: string }>
+      const existingSession = sessions.find(({ id }) => id === decoded.sid)
+      if (!existingSession || !decoded.sid) {
+        return { user: null }
+      }
+      user._sid = decoded.sid
     }
+
+    user.collection = decoded.collection
+    user._strategy = strategyName
+    return { user: user as Record<string, unknown> & { id: string; collection: string } }
   } catch (error) {
-    console.error('[payload-auth-arctic] JWT authentication error:', error)
+    console.error('[payload-auth-arctic] JWT auth error:', error)
     return { user: null }
   }
 }
@@ -431,10 +407,44 @@ export const arcticOAuthPlugin =
                 ? collectionConfig.auth.tokenExpiration || 7200
                 : 7200
 
+            // Create session if useSessions is enabled (Payload 3.74+; absent in older versions)
+            const useSessions =
+              typeof collectionConfig.auth === 'object'
+                ? (collectionConfig.auth as unknown as Record<string, unknown>).useSessions ?? false
+                : false
+
+            let sid: string | undefined
+
+            if (useSessions) {
+              const { v4: uuid } = await import('uuid')
+              sid = uuid()
+              const now = new Date()
+              const expiresAt = new Date(now.getTime() + tokenExpiration * 1000)
+              const session = { id: sid, createdAt: now, expiresAt }
+
+              // Clean expired sessions, add new one
+              const existingSessions = ((user as Record<string, unknown>).sessions as Array<{ expiresAt: Date | string }> || []).filter(
+                (s: { expiresAt: Date | string }) => {
+                  const exp = s.expiresAt instanceof Date ? s.expiresAt : new Date(s.expiresAt)
+                  return exp > now
+                },
+              )
+              existingSessions.push(session)
+
+              await req.payload.db.updateOne({
+                id: user.id as number | string,
+                collection: userCollection,
+                data: { sessions: existingSessions, updatedAt: null },
+                req,
+                returning: false,
+              })
+            }
+
             const fieldsToSign: Record<string, unknown> = {
               id: user.id,
               collection: userCollection,
               email: user.email || userInfo.email,
+              ...(sid ? { sid } : {}),
             }
 
             const { token: payloadToken } = await jwtSign({
@@ -480,6 +490,33 @@ export const arcticOAuthPlugin =
               },
             })
           }
+        },
+      })
+    }
+
+    // Custom logout endpoint — Payload's built-in logout checks req.user which isn't
+    // populated when disableLocalStrategy is true (the built-in auth middleware is skipped).
+    // Custom collection endpoints are registered before built-in auth endpoints in the
+    // sanitized endpoints array, so this handler matches first via endpoints.find().
+    if (disableLocalStrategy) {
+      oauthEndpoints.push({
+        path: '/logout',
+        method: 'post',
+        handler: async (req: PayloadRequest) => {
+          const baseUrl = getBaseUrl(req)
+          const isSecure = baseUrl.startsWith('https')
+          const cookiePrefix = req.payload.config.cookiePrefix || 'payload'
+          const expires = new Date(Date.now() - 1000).toUTCString()
+          const expiredCookie =
+            `${cookiePrefix}-token=; HttpOnly; Path=/;${isSecure ? ' Secure;' : ''} SameSite=Lax; Expires=${expires}`
+
+          return new Response(JSON.stringify({ message: 'Logged out successfully.' }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Set-Cookie': expiredCookie,
+            },
+          })
         },
       })
     }

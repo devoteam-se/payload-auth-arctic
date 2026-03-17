@@ -82,8 +82,35 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
     return `${OAUTH_STATE_COOKIE}=${value}; HttpOnly;${isSecure ? ' Secure;' : ''} SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 /**
- * Get the base URL from a PayloadRequest
- */ function getBaseUrl(req) {
+ * Get the base URL from a PayloadRequest.
+ *
+ * Resolution order:
+ *   1. Explicit override from plugin config (baseUrl option)
+ *   2. Payload's serverURL config
+ *   3. Reverse-proxy forwarded headers (x-forwarded-host / x-forwarded-proto)
+ *   4. Parse from req.url (fallback for direct access / local dev)
+ *   5. Host header fallback
+ *
+ * req.url is checked *after* forwarded headers because containerised
+ * environments (e.g. Azure App Service) often bind to 0.0.0.0, which
+ * Next.js then bakes into req.url — making it unusable as a public URL.
+ */ function getBaseUrl(req, overrideBaseUrl) {
+    // 1. Explicit override from plugin config
+    if (overrideBaseUrl) {
+        return overrideBaseUrl.replace(/\/$/, '');
+    }
+    // 2. Payload's serverURL config
+    const serverURL = req.payload?.config?.serverURL;
+    if (serverURL) {
+        return serverURL.replace(/\/$/, '');
+    }
+    // 3. Reverse proxy forwarded headers
+    const forwardedHost = req.headers?.get?.('x-forwarded-host');
+    if (forwardedHost) {
+        const protocol = req.headers?.get?.('x-forwarded-proto') || 'https';
+        return `${protocol}://${forwardedHost}`;
+    }
+    // 4. Parse from req.url (fallback for direct access / dev)
     if (req.url) {
         try {
             const url = new URL(req.url);
@@ -92,7 +119,8 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
         // Fall through
         }
     }
-    const host = req.headers?.get?.('host') || req.headers?.get?.('x-forwarded-host') || 'localhost:3000';
+    // 5. Host header fallback
+    const host = req.headers?.get?.('host') || 'localhost:3000';
     const protocol = req.headers?.get?.('x-forwarded-proto') || 'http';
     return `${protocol}://${host}`;
 }
@@ -130,7 +158,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
  * })
  * ```
  */ export const arcticOAuthPlugin = (pluginConfig)=>(config)=>{
-        const { providers, userCollection = 'users', autoCreateUsers = true, successRedirect = '/admin', failureRedirect = '/admin/login?error=oauth_failed', enabled = true, disableLocalStrategy = false } = pluginConfig;
+        const { providers, userCollection = 'users', autoCreateUsers = true, successRedirect = '/admin', failureRedirect = '/admin/login?error=oauth_failed', enabled = true, disableLocalStrategy = false, baseUrl: configBaseUrl } = pluginConfig;
         if (!enabled) {
             return config;
         }
@@ -165,7 +193,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                 method: 'get',
                 handler: async (req)=>{
                     try {
-                        const baseUrl = getBaseUrl(req);
+                        const baseUrl = getBaseUrl(req, configBaseUrl);
                         const isSecure = baseUrl.startsWith('https');
                         const redirectUri = `${baseUrl}/api/${userCollection}/oauth/${providerKey}/callback`;
                         const client = provider.createClient(redirectUri);
@@ -208,7 +236,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                 path: `/oauth/${providerKey}/callback`,
                 method: 'get',
                 handler: async (req)=>{
-                    const baseUrl = getBaseUrl(req);
+                    const baseUrl = getBaseUrl(req, configBaseUrl);
                     const isSecure = baseUrl.startsWith('https');
                     const clearCookie = buildStateCookie('', isSecure, 0);
                     try {
@@ -407,7 +435,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                 path: '/logout',
                 method: 'post',
                 handler: async (req)=>{
-                    const baseUrl = getBaseUrl(req);
+                    const baseUrl = getBaseUrl(req, configBaseUrl);
                     const isSecure = baseUrl.startsWith('https');
                     const cookiePrefix = req.payload.config.cookiePrefix || 'payload';
                     const expires = new Date(Date.now() - 1000).toUTCString();

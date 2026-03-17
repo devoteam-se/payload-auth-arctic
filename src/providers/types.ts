@@ -98,6 +98,15 @@ export interface ArcticOAuthPluginConfig {
   providers: OAuthProvider[]
 
   /**
+   * Explicit base URL override for OAuth redirect URIs.
+   * When set, this takes priority over all automatic URL detection.
+   * Useful when the app runs behind a reverse proxy or in a container
+   * where the internal hostname differs from the public domain.
+   * @example 'https://insights.cadeler.com'
+   */
+  baseUrl?: string
+
+  /**
    * User collection to add OAuth to
    * @default 'users'
    */

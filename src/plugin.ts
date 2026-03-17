@@ -99,9 +99,39 @@ function buildStateCookie(value: string, isSecure: boolean, maxAge: number): str
 }
 
 /**
- * Get the base URL from a PayloadRequest
+ * Get the base URL from a PayloadRequest.
+ *
+ * Resolution order:
+ *   1. Explicit override from plugin config (baseUrl option)
+ *   2. Payload's serverURL config
+ *   3. Reverse-proxy forwarded headers (x-forwarded-host / x-forwarded-proto)
+ *   4. Parse from req.url (fallback for direct access / local dev)
+ *   5. Host header fallback
+ *
+ * req.url is checked *after* forwarded headers because containerised
+ * environments (e.g. Azure App Service) often bind to 0.0.0.0, which
+ * Next.js then bakes into req.url — making it unusable as a public URL.
  */
-function getBaseUrl(req: PayloadRequest): string {
+function getBaseUrl(req: PayloadRequest, overrideBaseUrl?: string): string {
+  // 1. Explicit override from plugin config
+  if (overrideBaseUrl) {
+    return overrideBaseUrl.replace(/\/$/, '')
+  }
+
+  // 2. Payload's serverURL config
+  const serverURL = (req as any).payload?.config?.serverURL
+  if (serverURL) {
+    return serverURL.replace(/\/$/, '')
+  }
+
+  // 3. Reverse proxy forwarded headers
+  const forwardedHost = req.headers?.get?.('x-forwarded-host')
+  if (forwardedHost) {
+    const protocol = req.headers?.get?.('x-forwarded-proto') || 'https'
+    return `${protocol}://${forwardedHost}`
+  }
+
+  // 4. Parse from req.url (fallback for direct access / dev)
   if (req.url) {
     try {
       const url = new URL(req.url)
@@ -110,8 +140,9 @@ function getBaseUrl(req: PayloadRequest): string {
       // Fall through
     }
   }
-  const host =
-    req.headers?.get?.('host') || req.headers?.get?.('x-forwarded-host') || 'localhost:3000'
+
+  // 5. Host header fallback
+  const host = req.headers?.get?.('host') || 'localhost:3000'
   const protocol = req.headers?.get?.('x-forwarded-proto') || 'http'
   return `${protocol}://${host}`
 }
@@ -164,6 +195,7 @@ export const arcticOAuthPlugin =
       failureRedirect = '/admin/login?error=oauth_failed',
       enabled = true,
       disableLocalStrategy = false,
+      baseUrl: configBaseUrl,
     } = pluginConfig
 
     if (!enabled) {
@@ -207,7 +239,7 @@ export const arcticOAuthPlugin =
         method: 'get',
         handler: async (req: PayloadRequest) => {
           try {
-            const baseUrl = getBaseUrl(req)
+            const baseUrl = getBaseUrl(req, configBaseUrl)
             const isSecure = baseUrl.startsWith('https')
             const redirectUri = `${baseUrl}/api/${userCollection}/oauth/${providerKey}/callback`
 
@@ -262,7 +294,7 @@ export const arcticOAuthPlugin =
         path: `/oauth/${providerKey}/callback`,
         method: 'get',
         handler: async (req: PayloadRequest) => {
-          const baseUrl = getBaseUrl(req)
+          const baseUrl = getBaseUrl(req, configBaseUrl)
           const isSecure = baseUrl.startsWith('https')
           const clearCookie = buildStateCookie('', isSecure, 0)
 
@@ -503,7 +535,7 @@ export const arcticOAuthPlugin =
         path: '/logout',
         method: 'post',
         handler: async (req: PayloadRequest) => {
-          const baseUrl = getBaseUrl(req)
+          const baseUrl = getBaseUrl(req, configBaseUrl)
           const isSecure = baseUrl.startsWith('https')
           const cookiePrefix = req.payload.config.cookiePrefix || 'payload'
           const expires = new Date(Date.now() - 1000).toUTCString()

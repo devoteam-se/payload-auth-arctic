@@ -46,6 +46,9 @@ import { generateState, generateCodeVerifier } from 'arctic';
         }
         user.collection = decoded.collection;
         user._strategy = strategyName;
+        if (decoded.accessToken) {
+            user.accessToken = decoded.accessToken;
+        }
         return {
             user: user
         };
@@ -383,6 +386,9 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                             email: user.email || userInfo.email,
                             ...sid ? {
                                 sid
+                            } : {},
+                            ...pluginConfig.includeAccessTokenInJWT ? {
+                                accessToken: tokens.accessToken()
                             } : {}
                         };
                         const { token: payloadToken } = await jwtSign({

@@ -153,6 +153,12 @@ export interface ArcticOAuthPluginConfig {
         userInfo: OAuthUserInfo;
         provider: string;
     }) => Promise<boolean>;
+    /**
+     * Include the OAuth access token in the Payload JWT.
+     * Enables downstream use of the provider token (e.g. Power BI embedding).
+     * @default false
+     */
+    includeAccessTokenInJWT?: boolean;
 }
 /**
  * State data stored in cookie during OAuth flow

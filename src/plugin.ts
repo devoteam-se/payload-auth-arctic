@@ -43,6 +43,9 @@ const oauthJWTAuthenticate: AuthStrategyFunction = async ({ headers, payload, st
 
     user.collection = decoded.collection
     user._strategy = strategyName
+    if (decoded.accessToken) {
+      user.accessToken = decoded.accessToken
+    }
     return { user: user as Record<string, unknown> & { id: string; collection: string } }
   } catch (error) {
     console.error('[payload-auth-arctic] JWT auth error:', error)
@@ -477,6 +480,7 @@ export const arcticOAuthPlugin =
               collection: userCollection,
               email: user.email || userInfo.email,
               ...(sid ? { sid } : {}),
+              ...(pluginConfig.includeAccessTokenInJWT ? { accessToken: tokens.accessToken() } : {}),
             }
 
             const { token: payloadToken } = await jwtSign({

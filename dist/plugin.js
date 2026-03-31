@@ -351,7 +351,7 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                         const collectionConfig = req.payload.collections[userCollection].config;
                         const tokenExpiration = typeof collectionConfig.auth === 'object' ? collectionConfig.auth.tokenExpiration || 7200 : 7200;
                         // Create session if useSessions is enabled (Payload 3.74+; absent in older versions)
-                        const useSessions = typeof collectionConfig.auth === 'object' ? collectionConfig.auth.useSessions ?? false : false;
+                        const useSessions = typeof collectionConfig.auth === 'object' ? collectionConfig.auth.useSessions ?? true : true;
                         let sid;
                         if (useSessions) {
                             const { v4: uuid } = await import('uuid');
@@ -547,22 +547,31 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                         disableLocalStrategy: true
                     };
                 }
-                // When disableLocalStrategy is true, Payload skips registering the
-                // built-in 'local-jwt' auth strategy, which breaks cookie-based
-                // authentication entirely. We must inject the JWT strategy ourselves.
-                if (typeof authConfig === 'object') {
-                    const existing = authConfig.strategies || [];
-                    authConfig = {
-                        ...authConfig,
-                        strategies: [
-                            ...existing,
-                            {
-                                name: 'oauth-jwt',
-                                authenticate: oauthJWTAuthenticate
-                            }
-                        ]
-                    };
-                }
+            }
+            // Always register the oauth-jwt strategy so that the accessToken
+            // field is extracted from the JWT. When disableLocalStrategy is true
+            // this is also the only JWT strategy available.
+            if (authConfig === true) {
+                authConfig = {
+                    strategies: [
+                        {
+                            name: 'oauth-jwt',
+                            authenticate: oauthJWTAuthenticate
+                        }
+                    ]
+                };
+            } else if (typeof authConfig === 'object') {
+                const existing = authConfig.strategies || [];
+                authConfig = {
+                    ...authConfig,
+                    strategies: [
+                        ...existing,
+                        {
+                            name: 'oauth-jwt',
+                            authenticate: oauthJWTAuthenticate
+                        }
+                    ]
+                };
             }
             return {
                 ...collection,

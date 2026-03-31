@@ -445,8 +445,8 @@ export const arcticOAuthPlugin =
             // Create session if useSessions is enabled (Payload 3.74+; absent in older versions)
             const useSessions =
               typeof collectionConfig.auth === 'object'
-                ? (collectionConfig.auth as unknown as Record<string, unknown>).useSessions ?? false
-                : false
+                ? (collectionConfig.auth as unknown as Record<string, unknown>).useSessions ?? true
+                : true
 
             let sid: string | undefined
 
@@ -631,19 +631,23 @@ export const arcticOAuthPlugin =
         } else if (typeof authConfig === 'object') {
           authConfig = { ...authConfig, disableLocalStrategy: true }
         }
+      }
 
-        // When disableLocalStrategy is true, Payload skips registering the
-        // built-in 'local-jwt' auth strategy, which breaks cookie-based
-        // authentication entirely. We must inject the JWT strategy ourselves.
-        if (typeof authConfig === 'object') {
-          const existing = (authConfig as { strategies?: AuthStrategy[] }).strategies || []
-          authConfig = {
-            ...authConfig,
-            strategies: [
-              ...existing,
-              { name: 'oauth-jwt', authenticate: oauthJWTAuthenticate },
-            ],
-          }
+      // Always register the oauth-jwt strategy so that the accessToken
+      // field is extracted from the JWT. When disableLocalStrategy is true
+      // this is also the only JWT strategy available.
+      if (authConfig === true) {
+        authConfig = {
+          strategies: [{ name: 'oauth-jwt', authenticate: oauthJWTAuthenticate }],
+        }
+      } else if (typeof authConfig === 'object') {
+        const existing = (authConfig as { strategies?: AuthStrategy[] }).strategies || []
+        authConfig = {
+          ...authConfig,
+          strategies: [
+            ...existing,
+            { name: 'oauth-jwt', authenticate: oauthJWTAuthenticate },
+          ],
         }
       }
 

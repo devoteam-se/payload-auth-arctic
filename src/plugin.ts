@@ -457,19 +457,27 @@ export const arcticOAuthPlugin =
               const expiresAt = new Date(now.getTime() + tokenExpiration * 1000)
               const session = { id: sid, createdAt: now, expiresAt }
 
-              // Clean expired sessions, add new one
-              const existingSessions = ((user as Record<string, unknown>).sessions as Array<{ expiresAt: Date | string }> || []).filter(
-                (s: { expiresAt: Date | string }) => {
-                  const exp = s.expiresAt instanceof Date ? s.expiresAt : new Date(s.expiresAt)
-                  return exp > now
-                },
-              )
-              existingSessions.push(session)
+              // Mutate user object and pass it whole — matches Payload's
+              // built-in addSessionToUser which passes `data: user`.
+              // The db adapter may do a full replace rather than a $set.
+              const sessions = (user as Record<string, unknown>).sessions as Array<{ expiresAt: Date | string }> | undefined
+              if (!sessions?.length) {
+                (user as Record<string, unknown>).sessions = [session]
+              } else {
+                (user as Record<string, unknown>).sessions = sessions.filter(
+                  (s: { expiresAt: Date | string }) => {
+                    const exp = s.expiresAt instanceof Date ? s.expiresAt : new Date(s.expiresAt)
+                    return exp > now
+                  },
+                )
+                ;((user as Record<string, unknown>).sessions as Array<unknown>).push(session)
+              }
+              ;(user as Record<string, unknown>).updatedAt = null
 
               await req.payload.db.updateOne({
                 id: user.id as number | string,
                 collection: userCollection,
-                data: { sessions: existingSessions, updatedAt: null },
+                data: user,
                 req,
                 returning: false,
               })

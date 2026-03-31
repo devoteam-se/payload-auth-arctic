@@ -363,19 +363,27 @@ const COOKIE_MAX_AGE = 600 // 10 minutes
                                 createdAt: now,
                                 expiresAt
                             };
-                            // Clean expired sessions, add new one
-                            const existingSessions = (user.sessions || []).filter((s)=>{
-                                const exp = s.expiresAt instanceof Date ? s.expiresAt : new Date(s.expiresAt);
-                                return exp > now;
-                            });
-                            existingSessions.push(session);
+                            // Mutate user object and pass it whole — matches Payload's
+                            // built-in addSessionToUser which passes `data: user`.
+                            // The db adapter may do a full replace rather than a $set.
+                            const sessions = user.sessions;
+                            if (!sessions?.length) {
+                                user.sessions = [
+                                    session
+                                ];
+                            } else {
+                                user.sessions = sessions.filter((s)=>{
+                                    const exp = s.expiresAt instanceof Date ? s.expiresAt : new Date(s.expiresAt);
+                                    return exp > now;
+                                });
+                                user.sessions.push(session);
+                            }
+                            ;
+                            user.updatedAt = null;
                             await req.payload.db.updateOne({
                                 id: user.id,
                                 collection: userCollection,
-                                data: {
-                                    sessions: existingSessions,
-                                    updatedAt: null
-                                },
+                                data: user,
                                 req,
                                 returning: false
                             });
